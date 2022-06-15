@@ -1,14 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "basic",
     "blinky-pac",
     "blinky-hal",
     "blinky-irq",
     "blinky-async",
-    "blinky-actors",
-    "sensor",
-    "wifi",
 ]
 
 [patch.crates-io]
