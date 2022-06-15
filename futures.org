@@ -1,0 +1,111 @@
+#+STARTUP: Rust Futures
+#+TITLE: Futures
+
+* Traits
+#+BEGIN_SRC rust
+pub trait Future {
+    type Output;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>;
+}
+
+
+pub enum Poll<T> {
+    Ready(T),
+    Pending,
+}
+#+END_SRC
+
+* Syntactic sugar
+
+#+BEGIN_SRC rust Conversion
+async fn foo() -> u32 {
+    42
+}
+#+END_SRC
+
+becomes
+
+#+BEGIN_SRC rust Conversion
+fn foo() -> impl Future<Output = u32> {
+    FooFuture { value: 42 }
+}
+#+END_SRC
+
+
+*
+
+* FooFuture
+
+#+BEGIN_SRC rust
+struct FooFuture {
+    pub value: u32
+}
+
+impl Future for FooFuture {
+    type Output = u32;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.0)
+    }
+}
+#+END_SRC
+
+* Context
+
+#+BEGIN_SRC rust
+struct Counter {
+    value: AtomicU32,
+    waker: AtomicWaker, // From futures or embassy crates
+}
+
+
+impl Counter {
+    pub fn new(initial: u32) -> Self {
+        Self {
+            value: initial,
+            waker: AtomicWaker::new(),
+        }
+    }
+
+    pub fn increment(&mut self) {
+        self.value += 1;
+        // Wake task awaiting the counter
+        self.waker.wake();
+    }
+
+    pub fn wait(&self) -> MeaningfulFuture<'a> {
+        MeaningfulFuture {
+            counter: self,
+        }
+    }
+}
+
+pub struct MeaningfulFuture<'a> {
+    counter: &'a Counter,
+}
+
+impl Future for MeaningfulFuture {
+    type Output = u32;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.counter.value.load(...) == 42 {
+               Poll::Ready(42)
+        } else {
+            // Store a reference to ourselves for being awoken later
+            self.counter.waker.register(cx.waker());
+            Poll::Pending
+        }
+    }
+}
+#+END_SRC
+
+* Application
+
+#+BEGIN_SRC rust
+// Ass
+async fn myfn() {
+    let c = Counter::new(41);
+    let mut fut = c.wait();
+
+    /// Blocks if counter is not 42
+    let _ = fut.await;
+}
+#+END_SRC
